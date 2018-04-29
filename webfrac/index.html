@@ -1,0 +1,353 @@
+<html>
+<head>
+<title>2016-Mandelbrot-Set</title>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+<link rel="shortcut icon" href="favicon.ico"/>
+<link rel="bookmark" href="favicon.ico"/>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+  // choose precision according to machine type
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+  #else
+    precision mediump float;
+  #endif
+
+  varying vec2 vPosition;// parameter passed from vertex shader
+
+  void main(void) {
+    float cx = vPosition.x;
+    float cy = vPosition.y;
+    float hue;
+    float saturation;
+    float value;
+    float hueRound;
+    int hueIndex;
+    float f,p,q,t;
+
+    float x = 0.0;
+    float y = 0.0;
+    float tempX = 0.0;
+
+    int i = 0;
+    int runaway = 0;
+    const int iternum = 180;
+
+    // simple time escape method
+    for (int i=0; i < iternum; i++) {
+      tempX = x * x - y * y + float(cx);
+      y = x * y;
+      y = y + y;
+      y = y + float(cy);
+      x = tempX;
+      if (runaway == 0 && x * x + y * y > 4.0) {
+        runaway = i+1;
+        break;
+      }
+    }
+
+    // distance estimation && smooth hue variety
+    if (runaway != 0) {
+      hue = float(runaway) / float(iternum);
+      saturation = 0.6;
+      value = 1.0;
+      hueRound = hue * 6.0;
+      hueIndex = int(hueRound);
+      f = fract(hueRound);
+      p = value * (1.0 - saturation);             // r
+      q = value * (1.0 - f * saturation);         // g
+      t = value * (1.0 - (1.0 - f) * saturation); // b
+
+      if (hueIndex == 0)
+        gl_FragColor = vec4(value, t, p, 1.0);
+      else if (hueIndex == 1)
+        gl_FragColor = vec4(q, value, p, 1.0);
+      else if (hueIndex == 2)
+        gl_FragColor = vec4(p, value, t, 1.0);
+      else if (hueIndex == 3)
+        gl_FragColor = vec4(p, q, value, 1.0);
+      else if (hueIndex == 4)
+        gl_FragColor = vec4(t, p, value, 1.0);
+      else if (hueIndex == 5)
+        gl_FragColor = vec4(value, p, q, 1.0);
+    } else {
+      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    }
+  }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+  // do nothing
+  attribute vec2 aVertexPosition;
+  attribute vec2 aPlotPosition;
+  varying vec2 vPosition;
+  void main(void) {
+    gl_Position = vec4(aVertexPosition, 1.0, 1.0);
+    // sending actual postion to frag shader
+    vPosition = aPlotPosition;
+  }
+</script>
+
+<script type="text/javascript">
+  // common works, should not be changed
+  var gl;
+  function initGL(canvas) {
+    try {
+      gl = canvas.getContext("webgl");
+      gl.viewportWidth = canvas.width;
+      gl.viewportHeight = canvas.height;
+    } catch(e) {}
+    if (!gl) {
+      alert("Could not initialise WebGL, sorry :-(");
+    }
+  }
+  function getShader(gl, id) {
+    var shaderScript = document.getElementById(id);
+    if (!shaderScript) {
+      return null;
+    }
+    var str = "";
+    var k = shaderScript.firstChild;
+    while (k) {
+      if (k.nodeType == 3) {
+        str += k.textContent;
+      }
+      k = k.nextSibling;
+    }
+    var shader;
+    if (shaderScript.type == "x-shader/x-fragment") {
+      shader = gl.createShader(gl.FRAGMENT_SHADER);
+    } else if (shaderScript.type == "x-shader/x-vertex") {
+      shader = gl.createShader(gl.VERTEX_SHADER);
+    } else {
+      return null;
+    }
+    gl.shaderSource(shader, str);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      alert(gl.getShaderInfoLog(shader));
+      return null;
+    }
+    return shader;
+  }
+  var shaderProgram;
+  var aVertexPosition;
+  function initShaders() {
+    var fragmentShader = getShader(gl, "shader-fs");
+    var vertexShader = getShader(gl, "shader-vs");
+    shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+      alert("Could not initialise shaders");
+    }
+    gl.useProgram(shaderProgram);
+    aVertexPosition = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(aVertexPosition);
+    aPlotPosition = gl.getAttribLocation(shaderProgram, "aPlotPosition");
+    gl.enableVertexAttribArray(aPlotPosition);
+  }
+
+  // useful program start here!!
+  var centerOffsetX = 0;// var for zooming
+  var centerOffsetY = 0;
+  var zoom;
+  var zoomCenterX;
+  var zoomCenterY;
+  var vertexPositionBuffer;
+  function initBuffers() {
+    vertexPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+    var vertices = [
+         1.0,  1.0,
+        -1.0,  1.0,
+         1.0, -1.0,
+        -1.0, -1.0,
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    vertexPositionBuffer.itemSize = 2;// matrix size
+    vertexPositionBuffer.numItems = 4;
+  }
+  var baseCorners = [ // start coordinates
+      [ 0.7,  1.2],
+      [-2.2,  1.2],
+      [ 0.7, -1.2],
+      [-2.2, -1.2],
+  ];
+  var x = 0;
+  function drawScene() {
+    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+    gl.vertexAttribPointer(aVertexPosition, vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+    var plotPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, plotPositionBuffer);
+    
+    // using triangle stripe, so the order is specified
+    corners = [zoomTargetX2,zoomTargetY1,
+               zoomTargetX1,zoomTargetY1,
+               zoomTargetX2,zoomTargetY2,
+               zoomTargetX1,zoomTargetY2];
+
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(corners), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(aPlotPosition, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // from item 0 to item 4;
+    gl.deleteBuffer(plotPositionBuffer);
+  }
+
+  function resetZoom() {
+    zoomTargetX1 = parseFloat(document.getElementById("zoomTargetX1").value);
+    zoomTargetY1 = parseFloat(document.getElementById("zoomTargetY1").value);
+    zoomTargetX2 = parseFloat(document.getElementById("zoomTargetX2").value);
+    zoomTargetY2 = parseFloat(document.getElementById("zoomTargetY2").value);
+
+    document.getElementById("curCenterX1").value = zoomTargetX1;
+    document.getElementById("curCenterY1").value = zoomTargetY1;
+    document.getElementById("curCenterX2").value = zoomTargetX2;
+    document.getElementById("curCenterY2").value = zoomTargetY2;
+
+    // dispear
+    var canvas = document.getElementById('layer02');
+    var context = canvas.getContext("2d");
+    context.clearRect(0,0,800,600);
+  }
+
+  function recoverZoom() {
+    document.getElementById("zoomTargetX1").value = -2.2;
+    document.getElementById("zoomTargetY1").value = 1.2;
+    document.getElementById("zoomTargetX2").value = 0.7;
+    document.getElementById("zoomTargetY2").value = -1.2;
+    resetZoom();
+  }
+
+  function webGLStart() {
+    addMouseListener();
+    resetZoom();
+    var canvas = document.getElementById("layer01");
+    initGL(canvas);
+    initShaders()
+    initBuffers();
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+    setInterval(drawScene, 15);
+  }
+
+  function test(e) {
+    if(e.keyCode == 68){
+      resetZoom();
+    }
+    if(e.keyCode == 27){
+      recoverZoom();
+    }
+  }
+
+  function addMouseListener() {
+    var canvas = document.getElementById("layer02");
+    canvas.addEventListener("mousedown", mouseDownHandler, false);
+    canvas.addEventListener("mouseup", mouseUpHandler, false);
+    canvas.addEventListener("mousemove", mouseMoveHandler, false);
+    document.addEventListener("keydown", test, false);
+  }
+
+  var pgx1,pgy1,flag;
+
+  function mouseDownHandler(event) {
+    var x1 = parseFloat(document.getElementById("curCenterX1").value);
+    var y1 = parseFloat(document.getElementById("curCenterY1").value);
+    var x2 = parseFloat(document.getElementById("curCenterX2").value);
+    var y2 = parseFloat(document.getElementById("curCenterY2").value);
+
+    document.getElementById("zoomTargetX1").value = x1 + (x2-x1)*event.pageX/800;
+    document.getElementById("zoomTargetY1").value = y1 + (y2-y1)*event.pageY/600;
+
+    // dispear
+    var canvas = document.getElementById('layer02');
+    var context = canvas.getContext("2d");
+    context.clearRect(0,0,800,600);
+
+    pgx1 = event.pageX;
+    pgy1 = event.pageY;
+
+    flag = true;
+  }
+
+  function mouseMoveHandler(event) {
+    if(!flag) return;
+
+    var x1 = parseFloat(document.getElementById("curCenterX1").value);
+    var y1 = parseFloat(document.getElementById("curCenterY1").value);
+    var x2 = parseFloat(document.getElementById("curCenterX2").value);
+    var y2 = parseFloat(document.getElementById("curCenterY2").value);
+
+    var tmpx,tmpy;
+
+    tmpx = x1 + (x2-x1)*event.pageX/800;
+    tmpy = y1 + (y2-y1)*event.pageY/600;
+    document.getElementById("zoomTargetX2").value = tmpx;
+    document.getElementById("zoomTargetY2").value = tmpy;
+
+    var starx = document.getElementById("zoomTargetX1");
+    var stary = document.getElementById("zoomTargetY1");
+
+    //draw
+    var canvas = document.getElementById("layer02");
+    var context = canvas.getContext("2d");
+
+    context.clearRect(0,0,800,600);
+    context.strokeStyle = "rgba(255,0,0,0.5)";
+    context.strokeRect(pgx1,pgy1,event.pageX - pgx1, event.pageY - pgy1);
+
+  }
+
+  function mouseUpHandler(event) {
+    var x1 = parseFloat(document.getElementById("curCenterX1").value);
+    var y1 = parseFloat(document.getElementById("curCenterY1").value);
+    var x2 = parseFloat(document.getElementById("curCenterX2").value);
+    var y2 = parseFloat(document.getElementById("curCenterY2").value);
+
+    document.getElementById("zoomTargetX2").value = x1 + (x2-x1)*event.pageX/800;
+    document.getElementById("zoomTargetY2").value = y1 + (y2-y1)*event.pageY/600;
+
+    // dispear
+    var canvas = document.getElementById('layer02');
+    var context = canvas.getContext("2d");
+
+    flag = false;
+  }
+</script>
+</head>
+
+<body onload="webGLStart();">
+  <div style="width:800; height:600;">
+    <canvas id="layer01" style="border: none; position: absolute; left: 0; top: 0; z-index: 0;" width="800" height="600"></canvas>
+    <canvas id="layer02" style="border: none; position: absolute; left: 0; top: 0; z-index: 1;" width="800" height="600"></canvas>
+  </div>
+
+  <div id="controlPannel">
+    <h2>Inputs</h2>
+    <form name="inputs">
+      <p/>
+      Zoom target:<br/>
+      X1 <input type="text" id="zoomTargetX1" value="-2.2" />
+      Y1 <input type="text" id="zoomTargetY1" value="1.2" /><br/>
+      X2 <input type="text" id="zoomTargetX2" value="0.7" />
+      Y2 <input type="text" id="zoomTargetY2" value="-1.2" />
+  
+      <p/>
+      <input type="button" value="Zoom To" onClick="resetZoom()" />
+      <input type="button" value="Reset" onClick="recoverZoom()" />
+    </form>
+
+    <h2>Current state (read-only)</h2>
+    <form name="outputs">
+      <p/>
+      Current center: <br />
+      X1 <input type="text" id="curCenterX1" />
+      Y1 <input type="text" id="curCenterY1" /><br/>
+      X2 <input type="text" id="curCenterX2" />
+      Y2 <input type="text" id="curCenterY2" />
+      </form>
+  </div>
+</body>
+
+</html>

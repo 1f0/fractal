@@ -5,7 +5,7 @@
 ## webfrac
 > webfrac 是一个用WebGL绘制二维分形Mandelbrot的html网页
 
-[![](./images/webgl-mandelbrot-sm.png)](https://github.com/1f0/fractal/tree/master/webfrac/index.html)
+[![](./images/webgl-mandelbrot.png)](https://github.com/1f0/fractal/tree/master/webfrac/index.html)
 
 * 可以通过拖动鼠标或是调节参数: Zoomtarget 选择放大的范围
 * 按下 `d` 键放大, 按下 `ESC` 键返回最初的大小

@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <GL/glut.h>
+
+#include <GL/freeglut.h>
 #include <AntTweakBar.h>
 #include <vector>
 #include <map>

@@ -5,10 +5,12 @@
 ## webfrac
 > webfrac 是一个用WebGL绘制二维分形Mandelbrot的html网页
 
+[![](./images/webgl-mandelbrot-sm.png)](https://github.com/1f0/fractal/tree/master/webfrac/index.html)
+
 * 可以通过拖动鼠标或是调节参数: Zoomtarget 选择放大的范围
-* 按下'd'键放大, 按下ESC键返回最初的大小
+* 按下 `d` 键放大, 按下 `ESC` 键返回最初的大小
 * 实现思路：利用GPU的并行计算，在面片着色器程序中
-* 直接使用逃逸时间法, 计算当前点是否在Mandelbrot集内
+  * 直接使用逃逸时间法, 计算当前点是否在Mandelbrot集内
 
 ## ptb_frac
 > ptb_frac 是一个用Visual Studio 14.0搭建的C++工程，用于绘制二维分形
